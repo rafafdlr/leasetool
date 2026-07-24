@@ -83,7 +83,7 @@ def check_and_use_code(code: str):
     if not code:
         return False, "Please enter an access code."
 
-    params = {"filterByFormula": f"{{Code}}='{code}'"}
+    params = {"filterByFormula": f"LOWER({{Code}})='{code.lower()}'"}
     try:
         resp = requests.get(AIRTABLE_URL, headers=AIRTABLE_HEADERS, params=params, timeout=15)
     except Exception:
