@@ -1,0 +1,5 @@
+streamlit
+openai>=1.0
+pypdf
+pdf2image
+pytesseract
