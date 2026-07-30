@@ -13,15 +13,7 @@ AI_API_KEY = st.secrets["AI_API_KEY"]
 AI_BASE_URL = st.secrets.get("AI_BASE_URL", "https://api.moonshot.ai/v1")
 AI_MODEL = st.secrets.get("AI_MODEL", "kimi-k3")
 
-AIRTABLE_TOKEN = st.secrets["AIRTABLE_TOKEN"]
-AIRTABLE_BASE_ID = st.secrets["AIRTABLE_BASE_ID"]
-AIRTABLE_TABLE_NAME = st.secrets.get("AIRTABLE_TABLE_NAME", "Codes")
-
-AIRTABLE_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_TABLE_NAME}"
-AIRTABLE_HEADERS = {
-    "Authorization": f"Bearer {AIRTABLE_TOKEN}",
-    "Content-Type": "application/json",
-}
+TEST_PASSWORD = st.secrets.get("TEST_PASSWORD", "testcode123")
 
 FIELDS_PROMPT = """You are a commercial real estate analyst. Read the following commercial lease document and extract the key terms into a structured, clean report.
 
@@ -78,43 +70,14 @@ LEASE DOCUMENT TEXT:
 
 
 def check_and_use_code(code: str):
-    """Validates an access code and marks it used. Returns (success: bool, message: str)."""
-    code = code.strip().upper()
+    """TEMPORARY: simple password check while Airtable is being fixed.
+    Not truly one-time-use yet -- just unblocks testing the core tool."""
+    code = code.strip()
     if not code:
         return False, "Please enter an access code."
-
-    params = {"filterByFormula": f"LOWER({{Code}})='{code.lower()}'"}
-    try:
-        resp = requests.get(AIRTABLE_URL, headers=AIRTABLE_HEADERS, params=params, timeout=15)
-    except Exception as e:
-        return False, f"Connection error: {e}"
-
-    if resp.status_code != 200:
-        return False, f"Airtable error {resp.status_code}: {resp.text[:300]}"
-
-    records = resp.json().get("records", [])
-    if not records:
-        return False, "That code isn't valid. Please check and try again."
-
-    record = records[0]
-    if record["fields"].get("Used"):
-        return False, "That code has already been used. Please use a new one."
-
-    record_id = record["id"]
-    try:
-        patch_resp = requests.patch(
-            f"{AIRTABLE_URL}/{record_id}",
-            headers=AIRTABLE_HEADERS,
-            json={"fields": {"Used": True}},
-            timeout=15,
-        )
-    except Exception:
-        return False, "Something went wrong activating your code. Please try again."
-
-    if patch_resp.status_code not in (200, 201):
-        return False, "Something went wrong activating your code. Please try again."
-
-    return True, "Code accepted."
+    if code == TEST_PASSWORD:
+        return True, "Code accepted."
+    return False, "That code isn't valid. Please check and try again."
 
 
 def extract_pdf_text(uploaded_file):
