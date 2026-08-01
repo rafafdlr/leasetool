@@ -99,7 +99,7 @@ def extract_pdf_text(uploaded_file):
 def analyze_lease(lease_text: str) -> str:
     client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
     prompt = FIELDS_PROMPT.format(lease_text=lease_text[:400000])
-   response = client.chat.completions.create(
+    response = client.chat.completions.create(
         model=AI_MODEL,
         messages=[
             {"role": "system", "content": "You are a precise, detail-oriented commercial real estate analyst."},
