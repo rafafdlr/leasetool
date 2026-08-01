@@ -5,6 +5,12 @@ from pdf2image import convert_from_bytes
 import pytesseract
 import requests
 import io
+import re
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
+from io import BytesIO
 
 st.set_page_config(page_title="Lease with Ease", page_icon="📄", layout="centered")
 
@@ -14,6 +20,54 @@ AI_BASE_URL = st.secrets.get("AI_BASE_URL", "https://api.moonshot.ai/v1")
 AI_MODEL = st.secrets.get("AI_MODEL", "kimi-k3")
 
 TEST_PASSWORD = st.secrets.get("TEST_PASSWORD", "testcode123")
+
+
+def markdown_to_pdf(markdown_text: str, doc_title: str) -> bytes:
+    """Converts the AI's markdown report into a simple, clean PDF."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        topMargin=0.8 * inch, bottomMargin=0.8 * inch,
+        leftMargin=0.8 * inch, rightMargin=0.8 * inch,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('ReportTitle', parent=styles['Title'], fontSize=16, spaceAfter=14)
+    h2_style = ParagraphStyle('ReportH2', parent=styles['Heading2'], fontSize=12, spaceBefore=12, spaceAfter=6)
+    body_style = ParagraphStyle('ReportBody', parent=styles['Normal'], fontSize=10, leading=14, spaceAfter=4)
+
+    def inline_format(text: str) -> str:
+        # Convert **bold** markdown to reportlab-friendly <b> tags
+        return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+
+    story = [Paragraph(doc_title, title_style)]
+    bullet_buffer = []
+
+    def flush_bullets():
+        if bullet_buffer:
+            items = [ListItem(Paragraph(inline_format(b), body_style)) for b in bullet_buffer]
+            story.append(ListFlowable(items, bulletType='bullet', leftIndent=18))
+            bullet_buffer.clear()
+
+    for raw_line in markdown_text.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            flush_bullets()
+            continue
+        if line.startswith("### ") or line.startswith("## ") or line.startswith("# "):
+            flush_bullets()
+            heading_text = line.lstrip("#").strip()
+            story.append(Paragraph(inline_format(heading_text), h2_style))
+        elif line.startswith("- ") or line.startswith("* "):
+            bullet_buffer.append(line[2:].strip())
+        else:
+            flush_bullets()
+            story.append(Paragraph(inline_format(line), body_style))
+
+    flush_bullets()
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.read()
+
 
 FIELDS_PROMPT = """You are a commercial real estate analyst. Read the following commercial lease document and extract the key terms into a structured, clean report.
 
@@ -97,7 +151,7 @@ def extract_pdf_text(uploaded_file):
 
 
 def analyze_lease(lease_text: str) -> str:
-    client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL)
+    client = OpenAI(api_key=AI_API_KEY, base_url=AI_BASE_URL, timeout=120.0)
     prompt = FIELDS_PROMPT.format(lease_text=lease_text[:400000])
     response = client.chat.completions.create(
         model=AI_MODEL,
@@ -160,11 +214,13 @@ else:
             st.markdown("---")
             st.markdown(report)
 
+            pdf_bytes = markdown_to_pdf(report, "Lease Summary Report")
+
             st.download_button(
-                label="Download Report",
-                data=report,
-                file_name=f"lease_summary_{uploaded_file.name.rsplit('.', 1)[0]}.md",
-                mime="text/markdown",
+                label="Download Report (PDF)",
+                data=pdf_bytes,
+                file_name=f"lease_summary_{uploaded_file.name.rsplit('.', 1)[0]}.pdf",
+                mime="application/pdf",
             )
     else:
         st.info("Upload a lease PDF to get started.")
